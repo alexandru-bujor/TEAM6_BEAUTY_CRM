@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, User, Store, Calendar } from "lucide-react";
+import { LoginForm } from "@/components/auth/LoginForm";
 
 interface UserTypeSelectionProps {
   open: boolean;
@@ -22,12 +24,26 @@ const UserTypeSelection = ({ open, onOpenChange }: UserTypeSelectionProps) => {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="text-2xl text-center mb-6">
-            Join Beauty Book
+          <DialogTitle className="text-2xl text-center mb-2">
+            Welcome to Beauty Book
           </DialogTitle>
+          <DialogDescription className="text-center">
+            Sign in to your account or create a new one
+          </DialogDescription>
         </DialogHeader>
         
-        <div className="grid md:grid-cols-2 gap-6">
+        <Tabs defaultValue="login" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="login">Sign In</TabsTrigger>
+            <TabsTrigger value="register">Sign Up</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="login" className="mt-6">
+            <LoginForm onSuccess={() => onOpenChange(false)} onCancel={() => onOpenChange(false)} />
+          </TabsContent>
+          
+          <TabsContent value="register" className="mt-6">
+            <div className="grid md:grid-cols-2 gap-6">
           <Card 
             className="cursor-pointer border-2 hover:border-primary transition-all duration-300 group hover:shadow-medium"
             onClick={() => handleUserTypeSelect('customer')}
@@ -102,6 +118,8 @@ const UserTypeSelection = ({ open, onOpenChange }: UserTypeSelectionProps) => {
             </CardContent>
           </Card>
         </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

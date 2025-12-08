@@ -192,11 +192,12 @@ export const LocationServicesStep = ({ data, onDataChange, onNext, onBack }: Loc
                       onClick={() => handleCategoryToggle(category.id)}
                     >
                       <div className="flex items-start space-x-3">
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => handleCategoryToggle(category.id)}
-                          className="mt-1"
-                        />
+                        <span onClick={(e) => e.stopPropagation()} className="mt-1">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => handleCategoryToggle(category.id)}
+                          />
+                        </span>
                         <div className="flex-1">
                           <div className="flex items-center space-x-2 mb-1">
                             <Icon className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />

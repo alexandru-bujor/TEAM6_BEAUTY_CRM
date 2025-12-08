@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, User, Mail, Phone, MapPin, Calendar, Camera, Edit3, Save, X } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, User, Mail, Phone, MapPin, Calendar, Camera, Edit3, Save, X, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,26 +10,49 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { usersAPI, appointmentsAPI } from "@/lib/api";
+import { toast } from "sonner";
 
 const Profile = () => {
+  const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
-  const [profileData, setProfileData] = useState({
-    firstName: "Sarah",
-    lastName: "Johnson",
-    email: "sarah.johnson@email.com",
-    phone: "(555) 123-4567",
-    location: "New York, NY",
-    dateOfBirth: "1990-05-15",
-    bio: "Beauty enthusiast who loves trying new styles and treatments.",
-    preferences: {
-      favoriteServices: ["Hair Styling", "Nail Art", "Facials"],
-      notifications: {
-        email: true,
-        sms: false,
-        reminders: true
-      }
-    }
+  
+  // Fetch user profile
+  const { data: userProfile, isLoading: profileLoading } = useQuery({
+    queryKey: ['user-profile'],
+    queryFn: () => usersAPI.getProfile(),
   });
+
+  // Fetch stats
+  const { data: statsData } = useQuery({
+    queryKey: ['user-stats'],
+    queryFn: () => usersAPI.getDashboardStats(),
+  });
+
+  const [profileData, setProfileData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    location: "",
+    dateOfBirth: "",
+    bio: "",
+  });
+
+  // Update form data when profile loads
+  useEffect(() => {
+    if (userProfile) {
+      setProfileData({
+        firstName: userProfile.first_name || "",
+        lastName: userProfile.last_name || "",
+        email: userProfile.email || "",
+        phone: userProfile.phone || "",
+        location: userProfile.location || "",
+        dateOfBirth: userProfile.date_of_birth || "",
+        bio: userProfile.bio || "",
+      });
+    }
+  }, [userProfile]);
 
   const handleInputChange = (field: string, value: string) => {
     setProfileData(prev => ({
@@ -37,17 +61,43 @@ const Profile = () => {
     }));
   };
 
+  // Update profile mutation
+  const updateMutation = useMutation({
+    mutationFn: (data: any) => usersAPI.updateProfile(data),
+    onSuccess: () => {
+      toast.success('Profile updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['user-profile'] });
+      setIsEditing(false);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update profile');
+    },
+  });
+
   const handleSave = () => {
-    // Here you would save to backend
-    console.log("Saving profile:", profileData);
-    setIsEditing(false);
+    updateMutation.mutate({
+      first_name: profileData.firstName,
+      last_name: profileData.lastName,
+      phone: profileData.phone,
+      location: profileData.location,
+      date_of_birth: profileData.dateOfBirth,
+      bio: profileData.bio,
+    });
   };
 
   const stats = [
-    { label: "Total Bookings", value: "24", icon: Calendar },
-    { label: "Favorite Salons", value: "5", icon: MapPin },
-    { label: "Member Since", value: "2023", icon: User },
+    { label: "Total Bookings", value: statsData?.total_appointments || "0", icon: Calendar },
+    { label: "Favorite Salons", value: statsData?.favorite_salons || "0", icon: MapPin },
+    { label: "Member Since", value: userProfile?.created_at ? new Date(userProfile.created_at).getFullYear().toString() : "N/A", icon: User },
   ];
+
+  if (profileLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-secondary flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-secondary">
@@ -68,8 +118,14 @@ const Profile = () => {
             <Button
               onClick={() => isEditing ? handleSave() : setIsEditing(true)}
               className={isEditing ? "bg-gradient-primary" : ""}
+              disabled={updateMutation.isPending}
             >
-              {isEditing ? (
+              {updateMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : isEditing ? (
                 <>
                   <Save className="w-4 h-4 mr-2" />
                   Save Changes
@@ -105,9 +161,9 @@ const Profile = () => {
                 <div className="flex items-center gap-6">
                   <div className="relative">
                     <Avatar className="w-24 h-24">
-                      <AvatarImage src="/placeholder.svg" />
+                      <AvatarImage src={userProfile?.profile_image || undefined} />
                       <AvatarFallback className="text-lg">
-                        {profileData.firstName[0]}{profileData.lastName[0]}
+                        {profileData.firstName?.[0] || ''}{profileData.lastName?.[0] || ''}
                       </AvatarFallback>
                     </Avatar>
                     {isEditing && (
@@ -123,7 +179,9 @@ const Profile = () => {
                     <h3 className="text-lg font-semibold">
                       {profileData.firstName} {profileData.lastName}
                     </h3>
-                    <p className="text-muted-foreground">Member since 2023</p>
+                    <p className="text-muted-foreground">
+                      Member since {userProfile?.created_at ? new Date(userProfile.created_at).getFullYear() : 'N/A'}
+                    </p>
                   </div>
                 </div>
 
@@ -227,13 +285,19 @@ const Profile = () => {
               <CardContent>
                 <div className="space-y-4">
                   <div>
-                    <Label className="text-sm font-medium">Favorite Services</Label>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {profileData.preferences.favoriteServices.map((service, index) => (
-                        <Badge key={index} variant="secondary" className="bg-primary/10 text-primary">
-                          {service}
-                        </Badge>
-                      ))}
+                    <Label className="text-sm font-medium">Email Verified</Label>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Badge variant={userProfile?.email_verified ? "default" : "secondary"}>
+                        {userProfile?.email_verified ? "Verified" : "Not Verified"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Phone Verified</Label>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Badge variant={userProfile?.phone_verified ? "default" : "secondary"}>
+                        {userProfile?.phone_verified ? "Verified" : "Not Verified"}
+                      </Badge>
                     </div>
                   </div>
                 </div>

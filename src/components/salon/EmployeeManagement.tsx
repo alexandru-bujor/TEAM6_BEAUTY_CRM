@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,8 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Plus, Edit, Trash2, Phone, Mail, Star, Calendar, Scissors } from "lucide-react";
+import { Plus, Edit, Trash2, Phone, Mail, Star, Calendar, Scissors, Loader2 } from "lucide-react";
 import PhotoUpload from "./PhotoUpload";
+import { employeesAPI } from "@/lib/api";
+import { toast } from "sonner";
 
 interface Employee {
   id: number;
@@ -27,51 +30,30 @@ interface Employee {
 }
 
 const EmployeeManagement = () => {
-  const [employees, setEmployees] = useState<Employee[]>([
-    {
-      id: 1,
-      name: "Emma Wilson",
-      role: "Hair Stylist",
-      specialties: ["Hair Cut", "Hair Color", "Styling"],
-      email: "emma@luxebeauty.com",
-      phone: "(555) 234-5678",
-      bio: "Expert hair stylist with 8 years of experience specializing in modern cuts and color techniques.",
-      image: "/placeholder.svg",
-      rating: 4.9,
-      experience: 8,
-      isActive: true,
-      schedule: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-    },
-    {
-      id: 2,
-      name: "Maria Garcia",
-      role: "Nail Technician",
-      specialties: ["Gel Manicure", "Nail Art", "Pedicure"],
-      email: "maria@luxebeauty.com",
-      phone: "(555) 345-6789",
-      bio: "Professional nail technician with a passion for creative nail art and perfect finishes.",
-      rating: 4.8,
-      experience: 5,
-      isActive: true,
-      schedule: ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-    },
-    {
-      id: 3,
-      name: "David Chen",
-      role: "Massage Therapist",
-      specialties: ["Deep Tissue", "Swedish", "Hot Stone"],
-      email: "david@luxebeauty.com",
-      phone: "(555) 456-7890",
-      bio: "Licensed massage therapist specializing in therapeutic and relaxation techniques.",
-      rating: 4.7,
-      experience: 6,
-      isActive: true,
-      schedule: ["Monday", "Wednesday", "Friday", "Saturday", "Sunday"]
-    }
-  ]);
-
+  const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+
+  // Fetch employees
+  const { data: employeesData, isLoading: employeesLoading } = useQuery({
+    queryKey: ['my-employees'],
+    queryFn: () => employeesAPI.getMyEmployees(),
+  });
+
+  const employees: Employee[] = (employeesData || []).map((e: any) => ({
+    id: e.id,
+    name: e.name,
+    role: e.role,
+    specialties: e.specialties || [],
+    email: e.email || '',
+    phone: e.phone || '',
+    bio: e.bio || '',
+    image: e.image || undefined,
+    rating: parseFloat(e.rating) || 0,
+    experience: e.experience || 0,
+    isActive: e.is_active !== false,
+    schedule: e.schedule || [],
+  }));
   const [formData, setFormData] = useState({
     name: "",
     role: "",
@@ -127,9 +109,61 @@ const EmployeeManagement = () => {
     setIsDialogOpen(true);
   };
 
+  // Create employee mutation
+  const createMutation = useMutation({
+    mutationFn: (data: any) => employeesAPI.create(data),
+    onSuccess: () => {
+      toast.success('Employee added successfully');
+      queryClient.invalidateQueries({ queryKey: ['my-employees'] });
+      setIsDialogOpen(false);
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to add employee');
+    },
+  });
+
+  // Update employee mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => employeesAPI.update(id, data),
+    onSuccess: () => {
+      toast.success('Employee updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['my-employees'] });
+      setIsDialogOpen(false);
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update employee');
+    },
+  });
+
+  // Delete employee mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => employeesAPI.delete(id),
+    onSuccess: () => {
+      toast.success('Employee removed successfully');
+      queryClient.invalidateQueries({ queryKey: ['my-employees'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to remove employee');
+    },
+  });
+
+  // Toggle status mutation
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) => 
+      employeesAPI.update(id, { is_active: isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-employees'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update employee status');
+    },
+  });
+
   const handleSave = () => {
     if (!formData.name || !formData.role || !formData.email || !formData.phone) {
-      alert("Please fill in all required fields");
+      toast.error("Please fill in all required fields");
       return;
     }
 
@@ -139,43 +173,31 @@ const EmployeeManagement = () => {
       specialties: formData.specialties.split(",").map(s => s.trim()).filter(s => s),
       email: formData.email,
       phone: formData.phone,
-      bio: formData.bio,
-      image: formData.image,
+      bio: formData.bio || undefined,
+      image: formData.image || undefined,
       experience: parseInt(formData.experience) || 0,
       schedule: formData.schedule,
-      rating: 0,
-      isActive: true
+      is_active: true
     };
 
     if (editingEmployee) {
-      setEmployees(employees.map(employee => 
-        employee.id === editingEmployee.id 
-          ? { ...employee, ...employeeData }
-          : employee
-      ));
+      updateMutation.mutate({ id: editingEmployee.id, data: employeeData });
     } else {
-      setEmployees([...employees, {
-        id: Date.now(),
-        ...employeeData
-      }]);
+      createMutation.mutate(employeeData);
     }
-
-    setIsDialogOpen(false);
-    resetForm();
   };
 
   const handleDelete = (id: number) => {
     if (confirm("Are you sure you want to remove this employee?")) {
-      setEmployees(employees.filter(employee => employee.id !== id));
+      deleteMutation.mutate(id);
     }
   };
 
   const toggleStatus = (id: number) => {
-    setEmployees(employees.map(employee =>
-      employee.id === id
-        ? { ...employee, isActive: !employee.isActive }
-        : employee
-    ));
+    const employee = employees.find(e => e.id === id);
+    if (employee) {
+      toggleStatusMutation.mutate({ id, isActive: !employee.isActive });
+    }
   };
 
   const toggleScheduleDay = (day: string) => {
@@ -319,10 +341,28 @@ const EmployeeManagement = () => {
               />
 
               <div className="flex gap-2 pt-4">
-                <Button onClick={handleSave} className="bg-gradient-primary">
-                  {editingEmployee ? "Update Staff Member" : "Add Staff Member"}
+                <Button 
+                  onClick={handleSave} 
+                  className="bg-gradient-primary"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                >
+                  {(createMutation.isPending || updateMutation.isPending) ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {editingEmployee ? "Updating..." : "Adding..."}
+                    </>
+                  ) : (
+                    editingEmployee ? "Update Staff Member" : "Add Staff Member"
+                  )}
                 </Button>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsDialogOpen(false);
+                    resetForm();
+                  }}
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                >
                   Cancel
                 </Button>
               </div>
@@ -331,8 +371,19 @@ const EmployeeManagement = () => {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {employees.map((employee) => (
+      {employeesLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : employees.length === 0 ? (
+        <Card className="shadow-soft">
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground mb-4">No employees yet. Add your first staff member to get started!</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {employees.map((employee) => (
           <Card key={employee.id} className="shadow-soft hover:shadow-medium transition-shadow">
             <CardContent className="p-6">
               <div className="space-y-4">
@@ -411,6 +462,7 @@ const EmployeeManagement = () => {
                     size="sm"
                     onClick={() => handleEdit(employee)}
                     className="flex-1"
+                    disabled={deleteMutation.isPending || toggleStatusMutation.isPending}
                   >
                     <Edit className="w-4 h-4 mr-2" />
                     Edit
@@ -419,6 +471,7 @@ const EmployeeManagement = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => toggleStatus(employee.id)}
+                    disabled={toggleStatusMutation.isPending}
                   >
                     {employee.isActive ? "Deactivate" : "Activate"}
                   </Button>
@@ -426,15 +479,21 @@ const EmployeeManagement = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => handleDelete(employee.id)}
+                    disabled={deleteMutation.isPending}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {deleteMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
                   </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

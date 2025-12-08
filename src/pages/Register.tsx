@@ -9,6 +9,8 @@ import { LocationServicesStep } from "@/components/registration/LocationServices
 import { VerificationStep } from "@/components/registration/VerificationStep";
 import { ReviewStep } from "@/components/registration/ReviewStep";
 import CustomerRegistrationForm from "@/components/registration/CustomerRegistrationForm";
+import { authAPI, setToken } from "@/lib/api";
+import { toast } from "sonner";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -69,9 +71,32 @@ const Register = () => {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    navigate('/pending-approval');
+    try {
+      const response = await authAPI.registerSalon({
+        email: basicInfo.email,
+        password: basicInfo.password,
+        salonName: basicInfo.salonName,
+        contactName: basicInfo.contactName || undefined,
+        phone: basicInfo.phone,
+        address: locationServices.address,
+        city: locationServices.city,
+        state: locationServices.state,
+        zipCode: locationServices.zipCode,
+        isIndividualStylist: basicInfo.isIndividualStylist,
+        categories: locationServices.categories,
+      });
+
+      // Store token if provided
+      if (response.token) {
+        setToken(response.token);
+      }
+
+      toast.success('Registration submitted successfully!');
+      navigate('/pending-approval');
+    } catch (error: any) {
+      toast.error(error.message || 'Registration failed. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
   const renderStep = () => {

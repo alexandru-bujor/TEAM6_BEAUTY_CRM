@@ -1,13 +1,17 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, Mail, Phone, MapPin, ArrowRight, ArrowLeft } from "lucide-react";
 import Navigation from "@/components/ui/navigation";
+import { authAPI, setToken } from "@/lib/api";
+import { toast } from "sonner";
 
 const CustomerRegistrationForm = () => {
+  const navigate = useNavigate();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -26,10 +30,42 @@ const CustomerRegistrationForm = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle customer registration logic here
-    console.log("Customer registration:", formData);
+    
+    if (formData.password !== formData.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await authAPI.registerCustomer({
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        location: formData.location || undefined,
+      });
+
+      // Store token and user data
+      if (response.token) {
+        setToken(response.token);
+        localStorage.setItem('user', JSON.stringify(response.user));
+      }
+
+      toast.success('Account created successfully!');
+      navigate('/dashboard');
+    } catch (error: any) {
+      toast.error(error.message || 'Registration failed. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -153,9 +189,22 @@ const CustomerRegistrationForm = () => {
               />
             </div>
 
-            <Button type="submit" className="w-full bg-gradient-primary hover:opacity-90">
-              Create Account
-              <ArrowRight className="w-4 h-4 ml-2" />
+            <Button 
+              type="submit" 
+              className="w-full bg-gradient-primary hover:opacity-90"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
+                  Creating Account...
+                </>
+              ) : (
+                <>
+                  Create Account
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </>
+              )}
             </Button>
           </form>
           </CardContent>

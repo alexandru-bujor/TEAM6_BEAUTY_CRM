@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, MapPin, Star, Filter, Grid, List, ChevronDown, ArrowLeft } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Search, MapPin, Star, Filter, Grid, List, ChevronDown, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -11,11 +12,15 @@ import Navigation from "@/components/ui/navigation";
 import { SalonCard } from "@/components/salons/SalonCard";
 import { FilterPanel } from "@/components/salons/FilterPanel";
 import { Pagination } from "@/components/salons/Pagination";
+import { salonsAPI } from "@/lib/api";
+import { toast } from "sonner";
 
 // Import salon images
 import salon1 from "@/assets/salon-1.jpg";
 import salon2 from "@/assets/salon-2.jpg";
 import salon3 from "@/assets/salon-3.jpg";
+
+const SALON_IMAGES = [salon1, salon2, salon3];
 
 const MOCK_SALONS = [
   {
@@ -112,15 +117,65 @@ const Salons = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState({
-    services: [],
-    priceRange: [],
+    services: [] as string[],
+    priceRange: [] as string[],
     rating: 0,
     distance: 0,
     partnersOnly: false,
   });
 
   const itemsPerPage = 9;
-  const totalPages = Math.ceil(MOCK_SALONS.length / itemsPerPage);
+
+  // Build API query params
+  const queryParams: any = {
+    page: currentPage,
+    limit: itemsPerPage,
+  };
+
+  if (searchQuery) queryParams.search = searchQuery;
+  if (location) queryParams.city = location;
+  if (filters.services.length > 0) queryParams.category = filters.services[0];
+  if (filters.priceRange.length > 0) queryParams.priceRange = filters.priceRange[0];
+  if (filters.rating > 0) queryParams.minRating = filters.rating;
+  if (filters.partnersOnly) queryParams.partnersOnly = true;
+
+  // Fetch salons from API
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['salons', queryParams],
+    queryFn: () => salonsAPI.getAll(queryParams),
+    retry: 1,
+  });
+
+  const salons = data?.salons || [];
+  const pagination = data?.pagination || { total: 0, totalPages: 0 };
+  const totalPages = pagination.totalPages || 0;
+
+  // Handle search
+  const handleSearch = () => {
+    setCurrentPage(1);
+    refetch();
+  };
+
+  // Format salon data for SalonCard component
+  const formatSalonForCard = (salon: any) => {
+    // Get a consistent image based on salon ID
+    const imageIndex = (salon.id - 1) % SALON_IMAGES.length;
+    
+    return {
+      id: salon.id,
+      name: salon.salon_name,
+      rating: parseFloat(salon.rating) || 0,
+      reviewCount: salon.reviewCount || salon.total_reviews || 0,
+      location: `${salon.city}, ${salon.state}`,
+      address: `${salon.address}, ${salon.city}, ${salon.state} ${salon.zip_code}`,
+      image: salon.profile_image || SALON_IMAGES[imageIndex],
+      services: salon.categories || [],
+      priceRange: salon.price_range || '$$',
+      isPartner: salon.is_partner || false,
+      nextAvailable: "Check availability", // TODO: Calculate from appointments
+      specialties: salon.categories || [],
+    };
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -160,7 +215,10 @@ const Salons = () => {
                   className="pl-10 bg-background border-border h-11"
                 />
               </div>
-              <Button className="bg-gradient-primary hover:opacity-90 text-primary-foreground px-6 h-11 sm:px-8">
+              <Button 
+                className="bg-gradient-primary hover:opacity-90 text-primary-foreground px-6 h-11 sm:px-8"
+                onClick={handleSearch}
+              >
                 Search
               </Button>
             </div>
@@ -190,7 +248,14 @@ const Salons = () => {
                 </Button>
                 
                 <div className="text-sm text-muted-foreground">
-                  Showing {MOCK_SALONS.length} salons
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading...
+                    </div>
+                  ) : (
+                    `Showing ${pagination.total || 0} salons`
+                  )}
                 </div>
               </div>
 
@@ -230,28 +295,54 @@ const Salons = () => {
             </div>
 
             {/* Salon Grid/List */}
-            <div className={
-              viewMode === "grid" 
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6" 
-                : "space-y-4"
-            }>
-              {MOCK_SALONS.map((salon) => (
-                <SalonCard 
-                  key={salon.id} 
-                  salon={salon} 
-                  viewMode={viewMode}
-                />
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : error ? (
+              <Card className="shadow-soft">
+                <CardContent className="py-12 text-center">
+                  <p className="text-destructive mb-4">Failed to load salons. Please try again.</p>
+                  <Button onClick={() => refetch()} variant="outline">
+                    Retry
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : salons.length === 0 ? (
+              <Card className="shadow-soft">
+                <CardContent className="py-12 text-center">
+                  <p className="text-muted-foreground mb-4">No salons found. Try adjusting your search or filters.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className={
+                viewMode === "grid" 
+                  ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6" 
+                  : "space-y-4"
+              }>
+                {salons.map((salon: any) => (
+                  <SalonCard 
+                    key={salon.id} 
+                    salon={formatSalonForCard(salon)} 
+                    viewMode={viewMode}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Pagination */}
-            <div className="mt-12">
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-              />
-            </div>
+            {totalPages > 0 && (
+              <div className="mt-12">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={(page) => {
+                    setCurrentPage(page);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

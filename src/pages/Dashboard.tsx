@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Calendar, Clock, MapPin, Star, Plus, Filter, Search, User, Settings } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Calendar, Clock, MapPin, Star, Plus, Filter, Search, User, Settings, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,87 +9,86 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { appointmentsAPI, usersAPI, authAPI } from "@/lib/api";
+import { toast } from "sonner";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [user, setUser] = useState<any>(null);
 
-  // Mock data - in real app this would come from backend
-  const user = {
-    name: "Sarah Johnson",
-    email: "sarah.johnson@email.com",
-    avatar: "/placeholder.svg",
-    memberSince: "2023"
+  // Check if user is logged in
+  const { data: userData, isLoading: userLoading } = useQuery({
+    queryKey: ['auth-user'],
+    queryFn: async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No token');
+      }
+      const response = await authAPI.getMe();
+      return response.user;
+    },
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (userData) {
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+    } else if (!userLoading) {
+      setUser(null);
+    }
+  }, [userData, userLoading]);
+
+  // Fetch appointments if logged in
+  const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
+    queryKey: ['appointments', filterStatus],
+    queryFn: () => appointmentsAPI.getAll({ status: filterStatus !== 'all' ? filterStatus : undefined }),
+    enabled: !!user, // Only fetch if user is logged in
+    retry: false,
+  });
+
+  // Fetch dashboard stats if logged in
+  const { data: statsData } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => usersAPI.getDashboardStats(),
+    enabled: !!user,
+    retry: false,
+  });
+
+  const appointments = appointmentsData || [];
+  const stats = statsData || { upcoming: 0, completed: 0, favorite_salons: 0, avg_rating: 0 };
+
+  // Separate upcoming and past appointments
+  const today = new Date().toISOString().split('T')[0];
+  const upcomingAppointments = appointments.filter((apt: any) => {
+    const aptDate = apt.appointment_date;
+    return aptDate >= today && apt.status !== 'completed' && apt.status !== 'cancelled';
+  });
+
+  const pastAppointments = appointments.filter((apt: any) => {
+    const aptDate = apt.appointment_date;
+    return aptDate < today || apt.status === 'completed';
+  });
+
+  // Format appointment for display
+  const formatAppointment = (apt: any) => {
+    return {
+      id: apt.id,
+      salon: apt.salon_name || 'Unknown Salon',
+      service: apt.service_name || apt.service || 'Service',
+      date: apt.appointment_date,
+      time: apt.appointment_time,
+      duration: `${apt.duration} min`,
+      stylist: apt.employee_name || apt.employee || 'Not assigned',
+      price: `$${apt.price?.toFixed(2) || '0.00'}`,
+      status: apt.status,
+      address: apt.salon_address ? `${apt.salon_address}, ${apt.salon_city}, ${apt.salon_state}` : 'Address not available',
+      rating: apt.rating || apt.review_rating || undefined,
+    };
   };
-
-  const upcomingAppointments = [
-    {
-      id: 1,
-      salon: "Luxe Beauty Studio",
-      service: "Hair Cut & Color",
-      date: "2024-01-15",
-      time: "2:00 PM",
-      duration: "2 hours",
-      stylist: "Emma Wilson",
-      price: "$150",
-      status: "confirmed",
-      address: "123 Main St, NYC"
-    },
-    {
-      id: 2,
-      salon: "Glamour Nails",
-      service: "Gel Manicure",
-      date: "2024-01-18",
-      time: "11:00 AM",
-      duration: "1 hour",
-      stylist: "Maria Garcia",
-      price: "$45",
-      status: "confirmed",
-      address: "456 Broadway, NYC"
-    }
-  ];
-
-  const pastAppointments = [
-    {
-      id: 3,
-      salon: "Serenity Spa",
-      service: "Deep Tissue Massage",
-      date: "2024-01-05",
-      time: "3:00 PM",
-      duration: "1.5 hours",
-      stylist: "David Chen",
-      price: "$120",
-      status: "completed",
-      rating: 5,
-      address: "789 Wellness Ave, NYC"
-    },
-    {
-      id: 4,
-      salon: "Luxe Beauty Studio",
-      service: "Facial Treatment",
-      date: "2023-12-20",
-      time: "1:00 PM",
-      duration: "1 hour",
-      stylist: "Lisa Park",
-      price: "$85",
-      status: "completed",
-      rating: 4,
-      address: "123 Main St, NYC"
-    },
-    {
-      id: 5,
-      salon: "Style Central",
-      service: "Hair Styling",
-      date: "2023-12-10",
-      time: "10:00 AM",
-      duration: "2 hours",
-      stylist: "Alex Rodriguez",
-      price: "$95",
-      status: "completed",
-      rating: 5,
-      address: "321 Fashion Blvd, NYC"
-    }
-  ];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -116,12 +116,67 @@ const Dashboard = () => {
     ));
   };
 
-  const filteredAppointments = [...upcomingAppointments, ...pastAppointments].filter(apt => {
+  const allAppointments = [...upcomingAppointments.map(formatAppointment), ...pastAppointments.map(formatAppointment)];
+  const filteredAppointments = allAppointments.filter(apt => {
     const matchesSearch = apt.salon.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          apt.service.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === "all" || apt.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
+
+  // Handle appointment actions
+  const handleCancelAppointment = async (id: number) => {
+    try {
+      await appointmentsAPI.cancel(id);
+      toast.success('Appointment cancelled');
+      window.location.reload(); // Refresh to update list
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to cancel appointment');
+    }
+  };
+
+  const handleRescheduleAppointment = (id: number) => {
+    // TODO: Implement reschedule functionality
+    toast.info('Reschedule functionality coming soon');
+  };
+
+  // If loading, show loader
+  if (userLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-secondary flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // If not logged in, redirect (handled by ProtectedRoute, but show message just in case)
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-secondary flex items-center justify-center">
+        <Card className="max-w-md">
+          <CardContent className="py-12 text-center">
+            <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Please Log In</h3>
+            <p className="text-muted-foreground mb-4">
+              You need to be logged in to view your appointments and dashboard.
+            </p>
+            <div className="flex gap-4 justify-center">
+              <Link to="/register?type=customer">
+                <Button className="bg-gradient-primary">
+                  Create Account
+                </Button>
+              </Link>
+              <Link to="/">
+                <Button variant="outline">
+                  Go to Home
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-secondary">
@@ -131,11 +186,15 @@ const Dashboard = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Avatar className="w-12 h-12">
-                <AvatarImage src={user.avatar} />
-                <AvatarFallback>SJ</AvatarFallback>
+                <AvatarImage src={user.profile_image || "/placeholder.svg"} />
+                <AvatarFallback>
+                  {user.first_name?.[0]}{user.last_name?.[0] || user.email?.[0] || 'U'}
+                </AvatarFallback>
               </Avatar>
               <div>
-                <h1 className="text-2xl font-bold">Welcome back, {user.name}!</h1>
+                <h1 className="text-2xl font-bold">
+                  Welcome back, {user.first_name || user.email?.split('@')[0] || 'User'}!
+                </h1>
                 <p className="text-muted-foreground">Manage your beauty appointments</p>
               </div>
             </div>
@@ -165,7 +224,9 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Upcoming</p>
-                  <p className="text-2xl font-bold">{upcomingAppointments.length}</p>
+                  <p className="text-2xl font-bold">
+                    {appointmentsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : stats.upcoming || upcomingAppointments.length}
+                  </p>
                 </div>
                 <Calendar className="w-8 h-8 text-primary" />
               </div>
@@ -177,7 +238,9 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Completed</p>
-                  <p className="text-2xl font-bold">{pastAppointments.length}</p>
+                  <p className="text-2xl font-bold">
+                    {appointmentsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : stats.completed || pastAppointments.length}
+                  </p>
                 </div>
                 <Clock className="w-8 h-8 text-primary" />
               </div>
@@ -189,7 +252,9 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Favorite Salons</p>
-                  <p className="text-2xl font-bold">5</p>
+                  <p className="text-2xl font-bold">
+                    {appointmentsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : stats.favorite_salons || 0}
+                  </p>
                 </div>
                 <MapPin className="w-8 h-8 text-primary" />
               </div>
@@ -201,7 +266,9 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Avg Rating</p>
-                  <p className="text-2xl font-bold">4.8</p>
+                  <p className="text-2xl font-bold">
+                    {appointmentsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : (stats.avg_rating?.toFixed(1) || '0.0')}
+                  </p>
                 </div>
                 <Star className="w-8 h-8 text-primary" />
               </div>
@@ -244,7 +311,28 @@ const Dashboard = () => {
           </TabsList>
 
           <TabsContent value="upcoming" className="space-y-4">
-            {upcomingAppointments.map((appointment) => (
+            {appointmentsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : upcomingAppointments.length === 0 ? (
+              <Card className="shadow-soft">
+                <CardContent className="py-12 text-center">
+                  <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No upcoming appointments</h3>
+                  <p className="text-muted-foreground mb-4">Ready to book your first appointment?</p>
+                  <Link to="/salons">
+                    <Button className="bg-gradient-primary">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Book Appointment
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ) : (
+              upcomingAppointments.map((apt: any) => {
+                const appointment = formatAppointment(apt);
+                return (
               <Card key={appointment.id} className="shadow-soft hover:shadow-medium transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -281,10 +369,18 @@ const Dashboard = () => {
                         <p className="font-semibold text-lg">{appointment.price}</p>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleRescheduleAppointment(appointment.id)}
+                        >
                           Reschedule
                         </Button>
-                        <Button variant="destructive" size="sm">
+                        <Button 
+                          variant="destructive" 
+                          size="sm"
+                          onClick={() => handleCancelAppointment(appointment.id)}
+                        >
                           Cancel
                         </Button>
                       </div>
@@ -292,11 +388,28 @@ const Dashboard = () => {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+                );
+              })
+            )}
           </TabsContent>
 
           <TabsContent value="history" className="space-y-4">
-            {pastAppointments.map((appointment) => (
+            {appointmentsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : pastAppointments.length === 0 ? (
+              <Card className="shadow-soft">
+                <CardContent className="py-12 text-center">
+                  <Clock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No past appointments</h3>
+                  <p className="text-muted-foreground">Your completed appointments will appear here.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              pastAppointments.map((apt: any) => {
+                const appointment = formatAppointment(apt);
+                return (
               <Card key={appointment.id} className="shadow-soft hover:shadow-medium transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -355,106 +468,126 @@ const Dashboard = () => {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+                );
+              })
+            )}
           </TabsContent>
 
           <TabsContent value="all" className="space-y-4">
-            {filteredAppointments.map((appointment) => (
-              <Card key={appointment.id} className="shadow-soft hover:shadow-medium transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                    <div className="flex-1 space-y-3">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="font-semibold text-lg">{appointment.salon}</h3>
-                          <p className="text-primary font-medium">{appointment.service}</p>
-                          <p className="text-sm text-muted-foreground">{appointment.address}</p>
-                        </div>
-                        <Badge className={getStatusColor(appointment.status)}>
-                          {appointment.status}
-                        </Badge>
-                      </div>
-                      
-                      <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {appointment.date}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          {appointment.time} ({appointment.duration})
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <User className="w-4 h-4" />
-                          {appointment.stylist}
-                        </div>
-                      </div>
-                      
-                      {(appointment as any).rating && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">Your rating:</span>
-                          <div className="flex gap-1">
-                            {renderStars((appointment as any).rating)}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                      <div className="text-right">
-                        <p className="font-semibold text-lg">{appointment.price}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        {appointment.status === "confirmed" ? (
-                          <>
-                            <Button variant="outline" size="sm">
-                              Reschedule
-                            </Button>
-                            <Button variant="destructive" size="sm">
-                              Cancel
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button variant="outline" size="sm">
-                              Book Again
-                            </Button>
-                            {appointment.status === "completed" && !(appointment as any).rating && (
-                              <Button variant="default" size="sm">
-                                Rate Service
-                              </Button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+            {appointmentsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : filteredAppointments.length === 0 ? (
+              <Card className="shadow-soft">
+                <CardContent className="py-12 text-center">
+                  <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No appointments found</h3>
+                  <p className="text-muted-foreground mb-4">
+                    {searchTerm || filterStatus !== "all" 
+                      ? "Try adjusting your search or filter criteria"
+                      : "Ready to book your first appointment?"
+                    }
+                  </p>
+                  {!searchTerm && filterStatus === "all" && (
+                    <Link to="/salons">
+                      <Button className="bg-gradient-primary">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Book Your First Appointment
+                      </Button>
+                    </Link>
+                  )}
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              filteredAppointments.map((appointment) => (
+                <Card key={appointment.id} className="shadow-soft hover:shadow-medium transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                      <div className="flex-1 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="font-semibold text-lg">{appointment.salon}</h3>
+                            <p className="text-primary font-medium">{appointment.service}</p>
+                            <p className="text-sm text-muted-foreground">{appointment.address}</p>
+                          </div>
+                          <Badge className={getStatusColor(appointment.status)}>
+                            {appointment.status}
+                          </Badge>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-4 h-4" />
+                            {appointment.date}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            {appointment.time} ({appointment.duration})
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <User className="w-4 h-4" />
+                            {appointment.stylist}
+                          </div>
+                        </div>
+                        
+                        {(appointment as any).rating && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Your rating:</span>
+                            <div className="flex gap-1">
+                              {renderStars((appointment as any).rating)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                        <div className="text-right">
+                          <p className="font-semibold text-lg">{appointment.price}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          {appointment.status === "confirmed" ? (
+                            <>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleRescheduleAppointment(appointment.id)}
+                              >
+                                Reschedule
+                              </Button>
+                              <Button 
+                                variant="destructive" 
+                                size="sm"
+                                onClick={() => handleCancelAppointment(appointment.id)}
+                              >
+                                Cancel
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => navigate('/salons')}
+                              >
+                                Book Again
+                              </Button>
+                              {appointment.status === "completed" && !(appointment as any).rating && (
+                                <Button variant="default" size="sm">
+                                  Rate Service
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </TabsContent>
         </Tabs>
-
-        {filteredAppointments.length === 0 && (
-          <Card className="shadow-soft">
-            <CardContent className="py-12 text-center">
-              <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No appointments found</h3>
-              <p className="text-muted-foreground mb-4">
-                {searchTerm || filterStatus !== "all" 
-                  ? "Try adjusting your search or filter criteria"
-                  : "Ready to book your first appointment?"
-                }
-              </p>
-              <Link to="/salons">
-                <Button className="bg-gradient-primary">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Book Your First Appointment
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );

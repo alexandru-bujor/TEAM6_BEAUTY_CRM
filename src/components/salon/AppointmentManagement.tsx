@@ -1,12 +1,15 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar, Clock, User, Phone, Download, Search, Filter } from "lucide-react";
+import { Calendar, Clock, User, Phone, Download, Search, Filter, Loader2 } from "lucide-react";
 import { exportToCSV } from "@/utils/csvExport";
+import { appointmentsAPI, employeesAPI } from "@/lib/api";
+import { toast } from "sonner";
 
 interface Appointment {
   id: number;
@@ -24,81 +27,44 @@ interface Appointment {
 }
 
 const AppointmentManagement = () => {
-  const [appointments, setAppointments] = useState<Appointment[]>([
-    {
-      id: 1,
-      customerName: "Jessica Smith",
-      customerPhone: "(555) 111-2222",
-      customerEmail: "jessica@email.com",
-      service: "Hair Cut & Style",
-      employee: "Emma Wilson",
-      date: "2024-01-15",
-      time: "10:00 AM",
-      duration: 60,
-      price: 75,
-      status: "confirmed",
-      notes: "First time customer"
-    },
-    {
-      id: 2,
-      customerName: "Mike Johnson",
-      customerPhone: "(555) 333-4444",
-      customerEmail: "mike@email.com",
-      service: "Hair Color",
-      employee: "Emma Wilson",
-      date: "2024-01-15",
-      time: "2:00 PM",
-      duration: 120,
-      price: 150,
-      status: "confirmed"
-    },
-    {
-      id: 3,
-      customerName: "Sarah Davis",
-      customerPhone: "(555) 555-6666",
-      customerEmail: "sarah@email.com",
-      service: "Gel Manicure",
-      employee: "Maria Garcia",
-      date: "2024-01-15",
-      time: "11:00 AM",
-      duration: 45,
-      price: 35,
-      status: "pending"
-    },
-    {
-      id: 4,
-      customerName: "Tom Wilson",
-      customerPhone: "(555) 777-8888",
-      customerEmail: "tom@email.com",
-      service: "Deep Tissue Massage",
-      employee: "David Chen",
-      date: "2024-01-15",
-      time: "3:00 PM",
-      duration: 75,
-      price: 95,
-      status: "confirmed"
-    },
-    {
-      id: 5,
-      customerName: "Lisa Brown",
-      customerPhone: "(555) 999-0000",
-      customerEmail: "lisa@email.com",
-      service: "Hair Cut & Style",
-      employee: "Emma Wilson",
-      date: "2024-01-14",
-      time: "1:00 PM",
-      duration: 60,
-      price: 75,
-      status: "completed"
-    }
-  ]);
-
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [employeeFilter, setEmployeeFilter] = useState("all");
 
-  const employees = ["Emma Wilson", "Maria Garcia", "David Chen"];
+  // Fetch appointments
+  const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
+    queryKey: ['salon-appointments', statusFilter, selectedDate],
+    queryFn: () => appointmentsAPI.getAll({ 
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      date: selectedDate || undefined,
+    }),
+  });
+
+  // Fetch employees for filter
+  const { data: employeesData } = useQuery({
+    queryKey: ['my-employees'],
+    queryFn: () => employeesAPI.getMyEmployees(),
+  });
+
+  const employees = (employeesData || []).map((e: any) => e.name);
+
+  // Format appointments for display
+  const appointments: Appointment[] = (appointmentsData || []).map((apt: any) => ({
+    id: apt.id,
+    customerName: `${apt.customer_first_name || ''} ${apt.customer_last_name || ''}`.trim() || 'Unknown',
+    customerPhone: apt.customer_phone || '',
+    customerEmail: apt.customer_email || '',
+    service: apt.service_name || apt.service || 'Service',
+    employee: apt.employee_name || apt.employee || 'Not assigned',
+    date: apt.appointment_date,
+    time: apt.appointment_time,
+    duration: apt.duration || 0,
+    price: parseFloat(apt.price) || 0,
+    status: apt.status,
+    notes: apt.notes || undefined,
+  }));
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -115,10 +81,21 @@ const AppointmentManagement = () => {
     }
   };
 
+  // Update status mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) => 
+      appointmentsAPI.updateStatus(id, status),
+    onSuccess: () => {
+      toast.success('Appointment status updated');
+      queryClient.invalidateQueries({ queryKey: ['salon-appointments'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update appointment status');
+    },
+  });
+
   const updateStatus = (id: number, newStatus: Appointment["status"]) => {
-    setAppointments(appointments.map(apt => 
-      apt.id === id ? { ...apt, status: newStatus } : apt
-    ));
+    updateStatusMutation.mutate({ id, status: newStatus });
   };
 
   const filteredAppointments = appointments.filter(apt => {
@@ -378,72 +355,89 @@ const AppointmentManagement = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAppointments.map((appointment) => (
-                <TableRow key={appointment.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{appointment.customerName}</div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-2">
-                        <Phone className="w-3 h-3" />
-                        {appointment.customerPhone}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{appointment.service}</div>
-                    {appointment.notes && (
-                      <div className="text-sm text-muted-foreground">{appointment.notes}</div>
-                    )}
-                  </TableCell>
-                  <TableCell>{appointment.employee}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-4 h-4" />
-                      {appointment.date}
-                    </div>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <Clock className="w-3 h-3" />
-                      {appointment.time}
-                    </div>
-                  </TableCell>
-                  <TableCell>{appointment.duration} min</TableCell>
-                  <TableCell>${appointment.price}</TableCell>
-                  <TableCell>
-                    <Badge className={getStatusColor(appointment.status)}>
-                      {appointment.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex gap-1 justify-end">
-                      {appointment.status === "pending" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => updateStatus(appointment.id, "confirmed")}
-                        >
-                          Confirm
-                        </Button>
-                      )}
-                      {appointment.status === "confirmed" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => updateStatus(appointment.id, "completed")}
-                        >
-                          Complete
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => updateStatus(appointment.id, "cancelled")}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
+              {appointmentsLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredAppointments.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-12">
+                    <p className="text-muted-foreground">No appointments found</p>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredAppointments.map((appointment) => (
+                  <TableRow key={appointment.id}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{appointment.customerName}</div>
+                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                          <Phone className="w-3 h-3" />
+                          {appointment.customerPhone}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{appointment.service}</div>
+                      {appointment.notes && (
+                        <div className="text-sm text-muted-foreground">{appointment.notes}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>{appointment.employee}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        {appointment.date}
+                      </div>
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <Clock className="w-3 h-3" />
+                        {appointment.time}
+                      </div>
+                    </TableCell>
+                    <TableCell>{appointment.duration} min</TableCell>
+                    <TableCell>${appointment.price.toFixed(2)}</TableCell>
+                    <TableCell>
+                      <Badge className={getStatusColor(appointment.status)}>
+                        {appointment.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-1 justify-end">
+                        {appointment.status === "pending" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => updateStatus(appointment.id, "confirmed")}
+                            disabled={updateStatusMutation.isPending}
+                          >
+                            Confirm
+                          </Button>
+                        )}
+                        {appointment.status === "confirmed" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => updateStatus(appointment.id, "completed")}
+                            disabled={updateStatusMutation.isPending}
+                          >
+                            Complete
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => updateStatus(appointment.id, "cancelled")}
+                          disabled={updateStatusMutation.isPending}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

@@ -1,33 +1,68 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Settings, Bell, Calendar, Users, Scissors, TrendingUp, ArrowLeft } from "lucide-react";
+import { Settings, Bell, Calendar, Users, Scissors, TrendingUp, ArrowLeft, Loader2 } from "lucide-react";
 import Navigation from "@/components/ui/navigation";
 import SalonStats from "@/components/salon/SalonStats";
 import ServiceManagement from "@/components/salon/ServiceManagement";
 import EmployeeManagement from "@/components/salon/EmployeeManagement";
 import AppointmentManagement from "@/components/salon/AppointmentManagement";
+import { salonsAPI } from "@/lib/api";
+import { toast } from "sonner";
 
 const SalonDashboard = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
 
-  // Mock salon data - in real app this would come from backend
-  const salonData = {
-    name: "Luxe Beauty Studio",
-    owner: "Sarah Martinez",
-    email: "sarah@luxebeauty.com",
-    phone: "(555) 123-4567",
-    address: "123 Main Street, New York, NY 10001",
-    description: "Premier beauty salon offering luxury hair, nail, and spa services",
-    profileImage: "/placeholder.svg",
-    coverImage: "/placeholder.svg",
-    rating: 4.8,
-    totalReviews: 156,
-    status: "approved"
+  // Fetch salon data
+  const { data: salonData, isLoading: salonLoading, error: salonError } = useQuery({
+    queryKey: ['my-salon'],
+    queryFn: () => salonsAPI.getMySalon(),
+    retry: false,
+  });
+
+  if (salonLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-secondary flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (salonError || !salonData) {
+    return (
+      <div className="min-h-screen bg-gradient-secondary">
+        <Navigation />
+        <div className="container mx-auto px-4 py-16">
+          <Card className="max-w-md mx-auto">
+            <CardContent className="py-12 text-center">
+              <h2 className="text-xl font-semibold mb-2">Salon Not Found</h2>
+              <p className="text-muted-foreground mb-4">
+                You don't have a salon registered yet. Please register your salon first.
+              </p>
+              <Link to="/register">
+                <Button className="bg-gradient-primary">Register Salon</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, string> = {
+      pending: "bg-yellow-100 text-yellow-800",
+      approved: "bg-green-100 text-green-800",
+      rejected: "bg-red-100 text-red-800",
+      suspended: "bg-orange-100 text-orange-800",
+    };
+    return variants[status] || "bg-gray-100 text-gray-800";
   };
 
   return (
@@ -50,18 +85,22 @@ const SalonDashboard = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Avatar className="w-16 h-16">
-                <AvatarImage src={salonData.profileImage} />
-                <AvatarFallback>LB</AvatarFallback>
+                <AvatarImage src={salonData.profile_image || undefined} />
+                <AvatarFallback>
+                  {salonData.salon_name?.substring(0, 2).toUpperCase() || 'SB'}
+                </AvatarFallback>
               </Avatar>
               <div>
-                <h1 className="text-2xl font-bold">{salonData.name}</h1>
-                <p className="text-muted-foreground">Owner: {salonData.owner}</p>
+                <h1 className="text-2xl font-bold">{salonData.salon_name}</h1>
+                <p className="text-muted-foreground">
+                  {salonData.contact_name || 'Salon Owner'}
+                </p>
                 <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="secondary" className="bg-green-100 text-green-800">
+                  <Badge variant="secondary" className={getStatusBadge(salonData.status)}>
                     {salonData.status}
                   </Badge>
                   <span className="text-sm text-muted-foreground">
-                    ★ {salonData.rating} ({salonData.totalReviews} reviews)
+                    ★ {parseFloat(salonData.rating || 0).toFixed(1)} ({salonData.total_reviews || 0} reviews)
                   </span>
                 </div>
               </div>
@@ -171,11 +210,11 @@ const SalonDashboard = () => {
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-medium">Salon Name</label>
-                      <p className="text-lg">{salonData.name}</p>
+                      <p className="text-lg">{salonData.salon_name}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium">Owner</label>
-                      <p className="text-lg">{salonData.owner}</p>
+                      <label className="text-sm font-medium">Contact Name</label>
+                      <p className="text-lg">{salonData.contact_name || 'N/A'}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium">Email</label>
@@ -189,12 +228,24 @@ const SalonDashboard = () => {
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-medium">Address</label>
-                      <p className="text-lg">{salonData.address}</p>
+                      <p className="text-lg">
+                        {salonData.address}, {salonData.city}, {salonData.state} {salonData.zip_code}
+                      </p>
                     </div>
                     <div>
                       <label className="text-sm font-medium">Description</label>
-                      <p className="text-lg">{salonData.description}</p>
+                      <p className="text-lg">{salonData.description || 'No description provided'}</p>
                     </div>
+                    {salonData.categories && salonData.categories.length > 0 && (
+                      <div>
+                        <label className="text-sm font-medium">Categories</label>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {salonData.categories.map((cat: string, idx: number) => (
+                            <Badge key={idx} variant="secondary">{cat}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="pt-4">

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Mail, Phone, RefreshCw } from "lucide-react";
+import { verificationAPI } from "@/lib/api";
 
 interface VerificationData {
   emailCode: string;
@@ -26,6 +27,37 @@ export const VerificationStep = ({ data, onDataChange, onNext, onBack, email, ph
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [resendTimer, setResendTimer] = useState(0);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
+
+  // Send verification codes when component mounts
+  useEffect(() => {
+    let isMounted = true;
+
+    const sendInitialCodes = async () => {
+      if (email) {
+        try {
+          await verificationAPI.sendEmailCode(email);
+        } catch (error) {
+          console.error('Failed to send email code:', error);
+        }
+      }
+
+      if (phone) {
+        try {
+          await verificationAPI.sendPhoneCode(phone);
+        } catch (error) {
+          console.error('Failed to send phone code:', error);
+        }
+      }
+    };
+
+    sendInitialCodes();
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   useEffect(() => {
     if (resendTimer > 0) {
@@ -56,27 +88,53 @@ export const VerificationStep = ({ data, onDataChange, onNext, onBack, email, ph
   const handleVerifyEmail = async () => {
     if (data.emailCode.length === 6) {
       setIsVerifying(true);
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      onDataChange({ emailVerified: true });
-      setIsVerifying(false);
+      try {
+        await verificationAPI.verifyEmail(email, data.emailCode);
+        onDataChange({ emailVerified: true });
+        setErrors(prev => ({ ...prev, emailCode: '' }));
+      } catch (error: any) {
+        setErrors(prev => ({ 
+          ...prev, 
+          emailCode: error.message || 'Invalid verification code' 
+        }));
+      } finally {
+        setIsVerifying(false);
+      }
     }
   };
 
   const handleVerifyPhone = async () => {
     if (data.phoneCode.length === 6) {
       setIsVerifying(true);
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      onDataChange({ phoneVerified: true });
-      setIsVerifying(false);
+      try {
+        await verificationAPI.verifyPhone(phone, data.phoneCode);
+        onDataChange({ phoneVerified: true });
+        setErrors(prev => ({ ...prev, phoneCode: '' }));
+      } catch (error: any) {
+        setErrors(prev => ({ 
+          ...prev, 
+          phoneCode: error.message || 'Invalid verification code' 
+        }));
+      } finally {
+        setIsVerifying(false);
+      }
     }
   };
 
-  const handleResendCode = (type: 'email' | 'phone') => {
+  const handleResendCode = async (type: 'email' | 'phone') => {
     setResendTimer(60);
-    // Simulate sending new code
-    console.log(`Resending ${type} verification code`);
+    setIsSendingCode(true);
+    try {
+      if (type === 'email') {
+        await verificationAPI.sendEmailCode(email);
+      } else {
+        await verificationAPI.sendPhoneCode(phone);
+      }
+    } catch (error) {
+      console.error(`Failed to resend ${type} code:`, error);
+    } finally {
+      setIsSendingCode(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {

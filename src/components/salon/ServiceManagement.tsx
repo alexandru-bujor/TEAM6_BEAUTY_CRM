@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,8 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Clock, DollarSign, Image } from "lucide-react";
+import { Plus, Edit, Trash2, Clock, DollarSign, Image, Loader2 } from "lucide-react";
 import PhotoUpload from "./PhotoUpload";
+import { servicesAPI } from "@/lib/api";
+import { toast } from "sonner";
 
 interface Service {
   id: number;
@@ -23,48 +26,26 @@ interface Service {
 }
 
 const ServiceManagement = () => {
-  const [services, setServices] = useState<Service[]>([
-    {
-      id: 1,
-      name: "Hair Cut & Style",
-      category: "Hair",
-      duration: 60,
-      price: 75,
-      description: "Professional haircut with styling",
-      image: "/placeholder.svg",
-      isActive: true
-    },
-    {
-      id: 2,
-      name: "Hair Color",
-      category: "Hair",
-      duration: 120,
-      price: 150,
-      description: "Full hair coloring service",
-      isActive: true
-    },
-    {
-      id: 3,
-      name: "Gel Manicure",
-      category: "Nails",
-      duration: 45,
-      price: 35,
-      description: "Long-lasting gel manicure",
-      isActive: true
-    },
-    {
-      id: 4,
-      name: "Facial Treatment",
-      category: "Skincare",
-      duration: 75,
-      price: 95,
-      description: "Deep cleansing facial treatment",
-      isActive: false
-    }
-  ]);
-
+  const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
+
+  // Fetch services
+  const { data: servicesData, isLoading: servicesLoading } = useQuery({
+    queryKey: ['my-services'],
+    queryFn: () => servicesAPI.getMyServices(),
+  });
+
+  const services: Service[] = (servicesData || []).map((s: any) => ({
+    id: s.id,
+    name: s.name,
+    category: s.category,
+    duration: s.duration,
+    price: parseFloat(s.price),
+    description: s.description || '',
+    image: s.image || undefined,
+    isActive: s.is_active !== false,
+  }));
   const [formData, setFormData] = useState({
     name: "",
     category: "",
@@ -101,9 +82,61 @@ const ServiceManagement = () => {
     setIsDialogOpen(true);
   };
 
+  // Create service mutation
+  const createMutation = useMutation({
+    mutationFn: (data: any) => servicesAPI.create(data),
+    onSuccess: () => {
+      toast.success('Service created successfully');
+      queryClient.invalidateQueries({ queryKey: ['my-services'] });
+      setIsDialogOpen(false);
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to create service');
+    },
+  });
+
+  // Update service mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => servicesAPI.update(id, data),
+    onSuccess: () => {
+      toast.success('Service updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['my-services'] });
+      setIsDialogOpen(false);
+      resetForm();
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update service');
+    },
+  });
+
+  // Delete service mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => servicesAPI.delete(id),
+    onSuccess: () => {
+      toast.success('Service deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['my-services'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to delete service');
+    },
+  });
+
+  // Toggle status mutation
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) => 
+      servicesAPI.update(id, { is_active: isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-services'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update service status');
+    },
+  });
+
   const handleSave = () => {
     if (!formData.name || !formData.category || !formData.duration || !formData.price) {
-      alert("Please fill in all required fields");
+      toast.error("Please fill in all required fields");
       return;
     }
 
@@ -112,40 +145,29 @@ const ServiceManagement = () => {
       category: formData.category,
       duration: parseInt(formData.duration),
       price: parseFloat(formData.price),
-      description: formData.description,
-      image: formData.image,
-      isActive: true
+      description: formData.description || undefined,
+      image: formData.image || undefined,
+      is_active: true
     };
 
     if (editingService) {
-      setServices(services.map(service => 
-        service.id === editingService.id 
-          ? { ...service, ...serviceData }
-          : service
-      ));
+      updateMutation.mutate({ id: editingService.id, data: serviceData });
     } else {
-      setServices([...services, {
-        id: Date.now(),
-        ...serviceData
-      }]);
+      createMutation.mutate(serviceData);
     }
-
-    setIsDialogOpen(false);
-    resetForm();
   };
 
   const handleDelete = (id: number) => {
     if (confirm("Are you sure you want to delete this service?")) {
-      setServices(services.filter(service => service.id !== id));
+      deleteMutation.mutate(id);
     }
   };
 
   const toggleStatus = (id: number) => {
-    setServices(services.map(service =>
-      service.id === id
-        ? { ...service, isActive: !service.isActive }
-        : service
-    ));
+    const service = services.find(s => s.id === id);
+    if (service) {
+      toggleStatusMutation.mutate({ id, isActive: !service.isActive });
+    }
   };
 
   return (
@@ -233,10 +255,28 @@ const ServiceManagement = () => {
               />
 
               <div className="flex gap-2 pt-4">
-                <Button onClick={handleSave} className="bg-gradient-primary">
-                  {editingService ? "Update Service" : "Add Service"}
+                <Button 
+                  onClick={handleSave} 
+                  className="bg-gradient-primary"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                >
+                  {(createMutation.isPending || updateMutation.isPending) ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {editingService ? "Updating..." : "Adding..."}
+                    </>
+                  ) : (
+                    editingService ? "Update Service" : "Add Service"
+                  )}
                 </Button>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsDialogOpen(false);
+                    resetForm();
+                  }}
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                >
                   Cancel
                 </Button>
               </div>
@@ -250,19 +290,28 @@ const ServiceManagement = () => {
           <CardTitle>All Services ({services.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Service</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {services.map((service) => (
+          {servicesLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : services.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground mb-4">No services yet. Add your first service to get started!</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Service</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {services.map((service) => (
                 <TableRow key={service.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -301,6 +350,7 @@ const ServiceManagement = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => toggleStatus(service.id)}
+                      disabled={toggleStatusMutation.isPending}
                     >
                       <Badge variant={service.isActive ? "default" : "secondary"}>
                         {service.isActive ? "Active" : "Inactive"}
@@ -313,6 +363,7 @@ const ServiceManagement = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => handleEdit(service)}
+                        disabled={deleteMutation.isPending}
                       >
                         <Edit className="w-4 h-4" />
                       </Button>
@@ -320,15 +371,21 @@ const ServiceManagement = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => handleDelete(service.id)}
+                        disabled={deleteMutation.isPending}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {deleteMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
                       </Button>
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
