@@ -1,0 +1,109 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: lume_db_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: ./server
+        run: npm ci
+
+      - name: Run database migrations
+        working-directory: ./server
+        env:
+          DB_HOST: localhost
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_NAME: lume_db_test
+          JWT_SECRET: test-jwt-secret-key-for-ci-cd-pipeline
+          MFA_ENCRYPTION_KEY: test-mfa-encryption-key-32-chars-long
+        run: npm run migrate
+
+      - name: Run tests
+        working-directory: ./server
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_NAME: lume_db_test
+          JWT_SECRET: test-jwt-secret-key-for-ci-cd-pipeline
+          MFA_ENCRYPTION_KEY: test-mfa-encryption-key-32-chars-long
+        run: npm run test:ci
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./server/coverage/lcov.info
+          flags: backend
+          name: backend-coverage
+        if: always()
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Check build artifacts
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Build failed - dist directory not found"
+            exit 1
+          fi
+
+  deploy:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Deploy notification
+        run: |
+          echo "Tests passed and build successful. Ready for deployment."
+          echo "Deploy only if tests pass - this is a placeholder step"

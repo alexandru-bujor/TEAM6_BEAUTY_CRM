@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Star, MapPin, DollarSign } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, ChevronUp, Star, MapPin, DollarSign, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { salonsAPI } from "@/lib/api";
 
 interface FilterPanelProps {
   filters: {
@@ -18,22 +20,23 @@ interface FilterPanelProps {
   onFiltersChange: (filters: any) => void;
 }
 
-const SERVICES = [
-  { id: "hair", label: "Hair Services", count: 89 },
-  { id: "nails", label: "Nail Services", count: 67 },
-  { id: "skincare", label: "Skincare & Facials", count: 45 },
-  { id: "massage", label: "Massage Therapy", count: 34 },
-  { id: "lashes", label: "Lash Extensions", count: 28 },
-  { id: "brows", label: "Eyebrow Services", count: 31 },
-  { id: "waxing", label: "Waxing", count: 23 },
-  { id: "makeup", label: "Makeup Services", count: 19 },
+// Default values as fallback
+const DEFAULT_SERVICES = [
+  { id: "hair", label: "Hair Services", count: 0 },
+  { id: "nails", label: "Nail Services", count: 0 },
+  { id: "skincare", label: "Skincare & Facials", count: 0 },
+  { id: "massage", label: "Massage Therapy", count: 0 },
+  { id: "lashes", label: "Lash Extensions", count: 0 },
+  { id: "brows", label: "Eyebrow Services", count: 0 },
+  { id: "waxing", label: "Waxing", count: 0 },
+  { id: "makeup", label: "Makeup Services", count: 0 },
 ];
 
-const PRICE_RANGES = [
-  { id: "$", label: "$ (Under $50)", count: 23 },
-  { id: "$$", label: "$$ ($50-100)", count: 41 },
-  { id: "$$$", label: "$$$ ($100-200)", count: 32 },
-  { id: "$$$$", label: "$$$$ ($200+)", count: 15 },
+const DEFAULT_PRICE_RANGES = [
+  { id: "$", label: "$ (Under $50)", count: 0 },
+  { id: "$$", label: "$$ ($50-100)", count: 0 },
+  { id: "$$$", label: "$$$ ($100-200)", count: 0 },
+  { id: "$$$$", label: "$$$$ ($200+)", count: 0 },
 ];
 
 export const FilterPanel = ({ filters, onFiltersChange }: FilterPanelProps) => {
@@ -44,6 +47,18 @@ export const FilterPanel = ({ filters, onFiltersChange }: FilterPanelProps) => {
     location: true,
     other: true,
   });
+
+  // Fetch filter statistics from backend
+  const { data: filterStats, isLoading: isLoadingStats } = useQuery({
+    queryKey: ['filter-stats'],
+    queryFn: () => salonsAPI.getFilterStats(),
+    retry: 1,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Use backend data or fallback to defaults
+  const SERVICES = filterStats?.services || DEFAULT_SERVICES;
+  const PRICE_RANGES = filterStats?.priceRanges || DEFAULT_PRICE_RANGES;
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({
@@ -127,25 +142,33 @@ export const FilterPanel = ({ filters, onFiltersChange }: FilterPanelProps) => {
           
           {expandedSections.services && (
             <div className="space-y-3 mt-3">
-              {SERVICES.map((service) => (
-                <div key={service.id} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id={service.id}
-                      checked={filters.services.includes(service.id)}
-                      onCheckedChange={(checked) => 
-                        handleServiceChange(service.id, checked as boolean)
-                      }
-                    />
-                    <Label htmlFor={service.id} className="text-sm">
-                      {service.label}
-                    </Label>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {service.count}
-                  </span>
+              {isLoadingStats ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                 </div>
-              ))}
+              ) : SERVICES.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">No services available</p>
+              ) : (
+                SERVICES.map((service) => (
+                  <div key={service.id} className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id={service.id}
+                        checked={filters.services.includes(service.id)}
+                        onCheckedChange={(checked) => 
+                          handleServiceChange(service.id, checked as boolean)
+                        }
+                      />
+                      <Label htmlFor={service.id} className="text-sm">
+                        {service.label}
+                      </Label>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {service.count}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -171,25 +194,33 @@ export const FilterPanel = ({ filters, onFiltersChange }: FilterPanelProps) => {
           
           {expandedSections.price && (
             <div className="space-y-3 mt-3">
-              {PRICE_RANGES.map((price) => (
-                <div key={price.id} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id={price.id}
-                      checked={filters.priceRange.includes(price.id)}
-                      onCheckedChange={(checked) => 
-                        handlePriceRangeChange(price.id, checked as boolean)
-                      }
-                    />
-                    <Label htmlFor={price.id} className="text-sm">
-                      {price.label}
-                    </Label>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {price.count}
-                  </span>
+              {isLoadingStats ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                 </div>
-              ))}
+              ) : PRICE_RANGES.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">No price ranges available</p>
+              ) : (
+                PRICE_RANGES.map((price) => (
+                  <div key={price.id} className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id={price.id}
+                        checked={filters.priceRange.includes(price.id)}
+                        onCheckedChange={(checked) => 
+                          handlePriceRangeChange(price.id, checked as boolean)
+                        }
+                      />
+                      <Label htmlFor={price.id} className="text-sm">
+                        {price.label}
+                      </Label>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {price.count}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>

@@ -5,6 +5,112 @@ import { query, validationResult } from 'express-validator';
 
 const router = express.Router();
 
+// Get filter statistics (services and price ranges)
+router.get('/filter-stats', async (req, res) => {
+  try {
+    // Get service/category counts
+    const [categoryCounts] = await pool.execute(
+      `SELECT 
+        sc.category,
+        COUNT(DISTINCT sc.salon_id) as count
+      FROM salon_categories sc
+      INNER JOIN salons s ON sc.salon_id = s.id
+      WHERE s.status = 'approved'
+      GROUP BY sc.category
+      ORDER BY count DESC`
+    );
+
+    // Get price range counts
+    const [priceRangeCounts] = await pool.execute(
+      `SELECT 
+        price_range,
+        COUNT(*) as count
+      FROM salons
+      WHERE status = 'approved'
+      GROUP BY price_range
+      ORDER BY 
+        CASE price_range
+          WHEN '$' THEN 1
+          WHEN '$$' THEN 2
+          WHEN '$$$' THEN 3
+          WHEN '$$$$' THEN 4
+        END`
+    );
+
+    // Map categories to service IDs for frontend
+    const categoryMap = {
+      'Hair Services': 'hair',
+      'Hair': 'hair',
+      'Nail Services': 'nails',
+      'Nails': 'nails',
+      'Skincare & Facials': 'skincare',
+      'Skincare': 'skincare',
+      'Facials': 'skincare',
+      'Massage Therapy': 'massage',
+      'Massage': 'massage',
+      'Lash Extensions': 'lashes',
+      'Lashes': 'lashes',
+      'Eyebrow Services': 'brows',
+      'Brows': 'brows',
+      'Waxing': 'waxing',
+      'Makeup Services': 'makeup',
+      'Makeup': 'makeup',
+    };
+
+    // Build service counts array
+    const serviceCountsMap = {};
+    categoryCounts.forEach((row) => {
+      const mappedId = categoryMap[row.category] || row.category.toLowerCase().replace(/\s+/g, '-');
+      if (!serviceCountsMap[mappedId]) {
+        serviceCountsMap[mappedId] = 0;
+      }
+      serviceCountsMap[mappedId] += parseInt(row.count);
+    });
+
+    // Create service array with labels
+    const serviceLabels = {
+      'hair': 'Hair Services',
+      'nails': 'Nail Services',
+      'skincare': 'Skincare & Facials',
+      'massage': 'Massage Therapy',
+      'lashes': 'Lash Extensions',
+      'brows': 'Eyebrow Services',
+      'waxing': 'Waxing',
+      'makeup': 'Makeup Services',
+    };
+
+    const services = Object.keys(serviceLabels).map(id => ({
+      id,
+      label: serviceLabels[id],
+      count: serviceCountsMap[id] || 0,
+    })).filter(service => service.count > 0);
+
+    // Build price range array
+    const priceRanges = priceRangeCounts.map((row) => {
+      const priceRange = row.price_range;
+      let label = '';
+      if (priceRange === '$') label = '$ (Under $50)';
+      else if (priceRange === '$$') label = '$$ ($50-100)';
+      else if (priceRange === '$$$') label = '$$$ ($100-200)';
+      else if (priceRange === '$$$$') label = '$$$$ ($200+)';
+      
+      return {
+        id: priceRange,
+        label,
+        count: parseInt(row.count),
+      };
+    });
+
+    res.json({
+      services,
+      priceRanges,
+    });
+  } catch (error) {
+    console.error('Get filter stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch filter statistics' });
+  }
+});
+
 // Get all salons (with filters and pagination)
 router.get('/', [
   query('page').optional().isInt({ min: 1 }),

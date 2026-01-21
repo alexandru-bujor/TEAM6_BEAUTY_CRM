@@ -179,6 +179,8 @@ export const salonsAPI = {
     return api.get(`/salons`);
   },
 
+  getFilterStats: () => api.get('/salons/filter-stats'),
+
   getById: (id: number) => api.get(`/salons/${id}`),
 
   getMySalon: () => api.get('/salons/owner/my-salon'),
