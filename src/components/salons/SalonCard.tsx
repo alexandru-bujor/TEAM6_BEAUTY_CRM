@@ -1,4 +1,5 @@
 import { Star, MapPin, Clock, Heart, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,9 +87,11 @@ export const SalonCard = ({ salon, viewMode }: SalonCardProps) => {
                   <Button variant="outline" size="sm">
                     <Heart className="w-4 h-4" />
                   </Button>
-                  <Button size="sm" className="bg-gradient-primary hover:opacity-90">
-                    View Details
-                  </Button>
+                  <Link to={`/book/${salon.id}`}>
+                    <Button size="sm" className="bg-gradient-primary hover:opacity-90">
+                      Book Appointment
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </div>
@@ -159,10 +162,12 @@ export const SalonCard = ({ salon, viewMode }: SalonCardProps) => {
           <span className="font-medium text-primary flex-shrink-0">{salon.priceRange}</span>
         </div>
         
-        <Button className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground">
-          <ExternalLink className="w-4 h-4 mr-2" />
-          View Details
-        </Button>
+        <Link to={`/book/${salon.id}`} className="w-full">
+          <Button className="w-full bg-gradient-primary hover:opacity-90 text-primary-foreground">
+            <ExternalLink className="w-4 h-4 mr-2" />
+            Book Appointment
+          </Button>
+        </Link>
       </CardContent>
     </Card>
   );

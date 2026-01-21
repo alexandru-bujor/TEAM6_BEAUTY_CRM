@@ -4,20 +4,29 @@ import jwt from 'jsonwebtoken';
 import pool from '../database/connection.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { body, validationResult } from 'express-validator';
+import { authLimiter, registrationLimiter } from '../middleware/rateLimiter.js';
+import { logger } from '../middleware/secureLogger.js';
+import { isMfaEnabled, verifyMfaToken } from '../middleware/mfa.js';
 
 const router = express.Router();
 
-// Generate JWT token
+// Generate JWT token with secure settings
 const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
-  });
+  return jwt.sign(
+    { userId },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+      issuer: 'lume-beauty-crm',
+      audience: 'lume-beauty-crm-users',
+    }
+  );
 };
 
 // Register Customer
-router.post('/register/customer', [
+router.post('/register/customer', registrationLimiter, [
   body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 8 }),
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   body('firstName').notEmpty().trim(),
   body('lastName').notEmpty().trim(),
   body('phone').notEmpty().trim(),
@@ -25,19 +34,24 @@ router.post('/register/customer', [
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ error: 'Invalid registration data' });
     }
 
     const { email, password, firstName, lastName, phone, location } = req.body;
 
-    // Check if user already exists
+    // Check if user already exists (prevent enumeration)
     const [existingUsers] = await pool.execute(
       'SELECT id FROM users WHERE email = ?',
       [email]
     );
 
     if (existingUsers.length > 0) {
-      return res.status(400).json({ error: 'Email already registered' });
+      // Generic error message to prevent enumeration
+      logger.security('Registration attempt with existing email', {
+        email: email,
+        ip: req.ip,
+      });
+      return res.status(400).json({ error: 'Registration failed. Please check your information and try again.' });
     }
 
     // Hash password
@@ -64,15 +78,15 @@ router.post('/register/customer', [
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    logger.error('Registration error', error, { email: req.body.email });
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
 // Register Salon Owner
-router.post('/register/salon', [
+router.post('/register/salon', registrationLimiter, [
   body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 8 }),
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   body('salonName').notEmpty().trim(),
   body('phone').notEmpty().trim(),
   body('address').notEmpty().trim(),
@@ -83,7 +97,7 @@ router.post('/register/salon', [
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+      return res.status(400).json({ error: 'Invalid registration data' });
     }
 
     const {
@@ -100,18 +114,23 @@ router.post('/register/salon', [
       categories
     } = req.body;
 
-    // Check if user already exists
+    // Check if user already exists (prevent enumeration)
     const [existingUsers] = await pool.execute(
       'SELECT id FROM users WHERE email = ?',
       [email]
     );
 
     if (existingUsers.length > 0) {
-      return res.status(400).json({ error: 'Email already registered' });
+      // Generic error message to prevent enumeration
+      logger.security('Salon registration attempt with existing email', {
+        email: email,
+        ip: req.ip,
+      });
+      return res.status(400).json({ error: 'Registration failed. Please check your information and try again.' });
     }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
+    // Hash password with increased salt rounds for better security
+    const passwordHash = await bcrypt.hash(password, 12);
 
     // Start transaction
     const connection = await pool.getConnection();
@@ -171,44 +190,84 @@ router.post('/register/salon', [
       throw error;
     }
   } catch (error) {
-    console.error('Salon registration error:', error);
+    logger.error('Salon registration error', error, { email: req.body.email });
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
 // Login
-router.post('/login', [
+router.post('/login', authLimiter, [
   body('email').isEmail().normalizeEmail(),
   body('password').notEmpty(),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      const errorMessages = errors.array().map(e => e.msg).join(', ');
-      return res.status(400).json({ error: errorMessages });
+      return res.status(400).json({ error: 'Invalid email or password' });
     }
 
-    const { email, password } = req.body;
+    const { email, password, mfaToken } = req.body;
 
-    // Find user
+    // Find user (always perform password check to prevent timing attacks)
     const [users] = await pool.execute(
-      'SELECT id, email, password_hash, user_type, first_name, last_name FROM users WHERE email = ?',
+      'SELECT id, email, password_hash, user_type, first_name, last_name, phone FROM users WHERE email = ?',
       [email]
     );
 
-    if (users.length === 0) {
+    // Always perform bcrypt comparison to prevent timing attacks
+    const dummyHash = '$2a$12$dummy.hash.to.prevent.timing.attacks.here';
+    const userHash = users.length > 0 ? users[0].password_hash : dummyHash;
+    const isValidPassword = await bcrypt.compare(password, userHash);
+
+    // Generic error message to prevent enumeration
+    if (users.length === 0 || !isValidPassword) {
+      logger.auth('Failed login attempt', {
+        email: email,
+        ip: req.ip,
+        reason: users.length === 0 ? 'user_not_found' : 'invalid_password',
+      });
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     const user = users[0];
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    if (!isValidPassword) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+    // Check if MFA is enabled (with error handling)
+    let mfaEnabled = false;
+    try {
+      mfaEnabled = await isMfaEnabled(user.id);
+    } catch (error) {
+      console.error('Error checking MFA:', error);
+      // Continue with login if MFA check fails
+    }
+    
+    if (mfaEnabled) {
+      if (!mfaToken) {
+        return res.status(200).json({
+          requiresMfa: true,
+          message: 'MFA token required',
+        });
+      }
+
+      const mfaVerification = await verifyMfaToken(user.id, mfaToken);
+      if (!mfaVerification.valid) {
+        logger.auth('Failed MFA verification', {
+          userId: user.id,
+          email: email,
+          ip: req.ip,
+        });
+        return res.status(401).json({ error: 'Invalid MFA token' });
+      }
     }
 
     const token = generateToken(user.id);
+
+    // Log successful login
+    logger.auth('Successful login', {
+      userId: user.id,
+      email: email,
+      ip: req.ip,
+      userType: user.user_type,
+    });
 
     // Get salon info if salon owner
     let salon = null;
@@ -234,7 +293,7 @@ router.post('/login', [
       salon
     });
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error('Login error', error, { email: req.body.email });
     res.status(500).json({ error: 'Login failed' });
   }
 });

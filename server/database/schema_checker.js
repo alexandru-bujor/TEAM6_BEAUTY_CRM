@@ -25,7 +25,10 @@ export async function checkAndUpdateSchema() {
       'appointments',
       'reviews',
       'customer_favorites',
-      'verification_codes'
+      'verification_codes',
+      'password_reset_tokens',
+      'user_mfa',
+      'security_events'
     ];
     
     const [existingTables] = await connection.query(

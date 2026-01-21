@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, User, Mail, Phone, MapPin, Calendar, Camera, Edit3, Save, X, Loader2 } from "lucide-react";
+import { ArrowLeft, User, Mail, Phone, MapPin, Calendar, Camera, Edit3, Save, X, Loader2, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,15 +41,24 @@ const Profile = () => {
 
   // Update form data when profile loads
   useEffect(() => {
-    if (userProfile) {
+    if (userProfile?.user) {
+      const user = userProfile.user;
+      // Format date_of_birth for HTML date input (YYYY-MM-DD)
+      let formattedDate = "";
+      if (user.date_of_birth) {
+        const date = new Date(user.date_of_birth);
+        if (!isNaN(date.getTime())) {
+          formattedDate = date.toISOString().split('T')[0];
+        }
+      }
       setProfileData({
-        firstName: userProfile.first_name || "",
-        lastName: userProfile.last_name || "",
-        email: userProfile.email || "",
-        phone: userProfile.phone || "",
-        location: userProfile.location || "",
-        dateOfBirth: userProfile.date_of_birth || "",
-        bio: userProfile.bio || "",
+        firstName: user.first_name || "",
+        lastName: user.last_name || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        location: user.location || "",
+        dateOfBirth: formattedDate,
+        bio: user.bio || "",
       });
     }
   }, [userProfile]);
@@ -75,20 +84,24 @@ const Profile = () => {
   });
 
   const handleSave = () => {
-    updateMutation.mutate({
-      first_name: profileData.firstName,
-      last_name: profileData.lastName,
-      phone: profileData.phone,
-      location: profileData.location,
-      date_of_birth: profileData.dateOfBirth,
-      bio: profileData.bio,
-    });
+    // Prepare the update data with all editable fields
+    const updateData: any = {
+      first_name: profileData.firstName?.trim() || '',
+      last_name: profileData.lastName?.trim() || '',
+      email: profileData.email?.trim() || '',
+      phone: profileData.phone?.trim() || '',
+      location: profileData.location?.trim() || null,
+      date_of_birth: profileData.dateOfBirth || null,
+      bio: profileData.bio?.trim() || null,
+    };
+
+    updateMutation.mutate(updateData);
   };
 
   const stats = [
     { label: "Total Bookings", value: statsData?.total_appointments || "0", icon: Calendar },
     { label: "Favorite Salons", value: statsData?.favorite_salons || "0", icon: MapPin },
-    { label: "Member Since", value: userProfile?.created_at ? new Date(userProfile.created_at).getFullYear().toString() : "N/A", icon: User },
+    { label: "Member Since", value: userProfile?.user?.created_at ? new Date(userProfile.user.created_at).getFullYear().toString() : "N/A", icon: User },
   ];
 
   if (profileLoading) {
@@ -156,12 +169,12 @@ const Profile = () => {
               <CardHeader>
                 <CardTitle>Basic Information</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-4">
                 {/* Profile Picture */}
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-4">
                   <div className="relative">
                     <Avatar className="w-24 h-24">
-                      <AvatarImage src={userProfile?.profile_image || undefined} />
+                      <AvatarImage src={userProfile?.user?.profile_image || undefined} />
                       <AvatarFallback className="text-lg">
                         {profileData.firstName?.[0] || ''}{profileData.lastName?.[0] || ''}
                       </AvatarFallback>
@@ -180,7 +193,7 @@ const Profile = () => {
                       {profileData.firstName} {profileData.lastName}
                     </h3>
                     <p className="text-muted-foreground">
-                      Member since {userProfile?.created_at ? new Date(userProfile.created_at).getFullYear() : 'N/A'}
+                      Member since {userProfile?.user?.created_at ? new Date(userProfile.user.created_at).getFullYear() : 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -188,8 +201,8 @@ const Profile = () => {
                 <Separator />
 
                 {/* Form Fields */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
                     <Label htmlFor="firstName">First Name</Label>
                     <Input
                       id="firstName"
@@ -198,7 +211,7 @@ const Profile = () => {
                       disabled={!isEditing}
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     <Label htmlFor="lastName">Last Name</Label>
                     <Input
                       id="lastName"
@@ -209,7 +222,7 @@ const Profile = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="email">Email</Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -224,7 +237,7 @@ const Profile = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="phone">Phone Number</Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -238,7 +251,7 @@ const Profile = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="location">Location</Label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -252,7 +265,7 @@ const Profile = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="dateOfBirth">Date of Birth</Label>
                   <Input
                     id="dateOfBirth"
@@ -263,7 +276,7 @@ const Profile = () => {
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="bio">Bio</Label>
                   <Textarea
                     id="bio"
@@ -287,16 +300,16 @@ const Profile = () => {
                   <div>
                     <Label className="text-sm font-medium">Email Verified</Label>
                     <div className="flex items-center gap-2 mt-2">
-                      <Badge variant={userProfile?.email_verified ? "default" : "secondary"}>
-                        {userProfile?.email_verified ? "Verified" : "Not Verified"}
+                      <Badge variant={userProfile?.user?.email_verified ? "default" : "secondary"}>
+                        {userProfile?.user?.email_verified ? "Verified" : "Not Verified"}
                       </Badge>
                     </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Phone Verified</Label>
                     <div className="flex items-center gap-2 mt-2">
-                      <Badge variant={userProfile?.phone_verified ? "default" : "secondary"}>
-                        {userProfile?.phone_verified ? "Verified" : "Not Verified"}
+                      <Badge variant={userProfile?.user?.phone_verified ? "default" : "secondary"}>
+                        {userProfile?.user?.phone_verified ? "Verified" : "Not Verified"}
                       </Badge>
                     </div>
                   </div>
@@ -335,23 +348,31 @@ const Profile = () => {
               <CardHeader>
                 <CardTitle>Quick Actions</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <Link to="/dashboard">
+              <CardContent>
+                <div className="space-y-3">
+                  <Link to="/salons" className="block">
+                    <Button variant="outline" className="w-full justify-start bg-gradient-primary text-primary-foreground hover:opacity-90">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Book Appointment
+                    </Button>
+                  </Link>
+                  <Link to="/dashboard" className="block">
+                    <Button variant="outline" className="w-full justify-start">
+                      <Calendar className="w-4 h-4 mr-2" />
+                      View Appointments
+                    </Button>
+                  </Link>
+                  <Link to="/salons" className="block">
+                    <Button variant="outline" className="w-full justify-start">
+                      <MapPin className="w-4 h-4 mr-2" />
+                      Find Salons
+                    </Button>
+                  </Link>
                   <Button variant="outline" className="w-full justify-start">
-                    <Calendar className="w-4 h-4 mr-2" />
-                    View Appointments
+                    <Mail className="w-4 h-4 mr-2" />
+                    Contact Support
                   </Button>
-                </Link>
-                <Link to="/salons">
-                  <Button variant="outline" className="w-full justify-start">
-                    <MapPin className="w-4 h-4 mr-2" />
-                    Find Salons
-                  </Button>
-                </Link>
-                <Button variant="outline" className="w-full justify-start">
-                  <Mail className="w-4 h-4 mr-2" />
-                  Contact Support
-                </Button>
+                </div>
               </CardContent>
             </Card>
           </div>

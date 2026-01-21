@@ -13,6 +13,13 @@ import appointmentRoutes from './routes/appointments.js';
 import userRoutes from './routes/users.js';
 import verificationRoutes from './routes/verification.js';
 import adminRoutes from './routes/admin.js';
+import passwordResetRoutes from './routes/passwordReset.js';
+import mfaRoutes from './routes/mfa.js';
+
+// Import security middleware
+import { securityHeaders, customSecurityHeaders } from './middleware/securityHeaders.js';
+import { apiLimiter } from './middleware/rateLimiter.js';
+import { logger } from './middleware/secureLogger.js';
 
 // Import migration function
 import { runMigrations } from './database/migrate.js';
@@ -42,9 +49,32 @@ const corsOptions = process.env.NODE_ENV === 'production'
       allowedHeaders: ['Content-Type', 'Authorization'],
     };
 
+// Security headers (must be early in middleware chain)
+app.use(securityHeaders);
+app.use(customSecurityHeaders);
+
+// Trust proxy (for accurate IP addresses behind reverse proxy)
+app.set('trust proxy', 1);
+
+// CORS
 app.use(cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// Body parsing
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    logger.request(req, res, duration);
+  });
+  next();
+});
+
+// General API rate limiting
+app.use('/api', apiLimiter);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -56,6 +86,8 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/password-reset', passwordResetRoutes);
+app.use('/api/mfa', mfaRoutes);
 app.use('/api/salons', salonRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/employees', employeeRoutes);
@@ -71,9 +103,21 @@ app.use((req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  logger.error('Unhandled error', err, {
+    path: req.path,
+    method: req.method,
+    ip: req.ip,
+    requestId: req.id,
+  });
+  
+  // Don't leak error details in production
+  const message = process.env.NODE_ENV === 'production'
+    ? 'Internal server error'
+    : err.message || 'Internal server error';
+  
   res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
+    error: message,
+    requestId: req.id,
   });
 });
 

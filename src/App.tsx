@@ -11,6 +11,7 @@ import Profile from "./pages/Profile";
 import Dashboard from "./pages/Dashboard";
 import SalonDashboard from "./pages/SalonDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import BookAppointment from "./pages/BookAppointment";
 import NotFound from "./pages/NotFound";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/dashboard" element={<ProtectedRoute requiredUserType="customer"><Dashboard /></ProtectedRoute>} />
           <Route path="/salon-dashboard" element={<ProtectedRoute requiredUserType="salon_owner"><SalonDashboard /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute requiredUserType="admin"><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/book/:salonId" element={<BookAppointment />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

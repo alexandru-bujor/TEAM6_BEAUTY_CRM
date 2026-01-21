@@ -52,6 +52,7 @@ router.put('/profile', authenticateToken, [
     const {
       first_name,
       last_name,
+      email,
       phone,
       location,
       date_of_birth,
@@ -59,18 +60,66 @@ router.put('/profile', authenticateToken, [
       profile_image
     } = req.body;
 
-    await pool.execute(
-      `UPDATE users 
-       SET first_name = COALESCE(?, first_name),
-           last_name = COALESCE(?, last_name),
-           phone = COALESCE(?, phone),
-           location = COALESCE(?, location),
-           date_of_birth = COALESCE(?, date_of_birth),
-           bio = COALESCE(?, bio),
-           profile_image = COALESCE(?, profile_image)
-       WHERE id = ?`,
-      [first_name, last_name, phone, location, date_of_birth, bio, profile_image, req.user.id]
-    );
+    // Check if email is being changed
+    let emailChanged = false;
+    if (email) {
+      const [currentUser] = await pool.execute(
+        'SELECT email FROM users WHERE id = ?',
+        [req.user.id]
+      );
+      if (currentUser.length > 0 && currentUser[0].email !== email) {
+        emailChanged = true;
+      }
+    }
+
+    // Build the UPDATE query dynamically
+    const updateFields = [];
+    const updateValues = [];
+
+    if (first_name !== undefined) {
+      updateFields.push('first_name = ?');
+      updateValues.push(first_name);
+    }
+    if (last_name !== undefined) {
+      updateFields.push('last_name = ?');
+      updateValues.push(last_name);
+    }
+    if (email !== undefined) {
+      updateFields.push('email = ?');
+      updateValues.push(email);
+      // Reset email verification if email is changed
+      if (emailChanged) {
+        updateFields.push('email_verified = FALSE');
+      }
+    }
+    if (phone !== undefined) {
+      updateFields.push('phone = ?');
+      updateValues.push(phone);
+    }
+    if (location !== undefined) {
+      updateFields.push('location = ?');
+      updateValues.push(location);
+    }
+    if (date_of_birth !== undefined) {
+      updateFields.push('date_of_birth = ?');
+      updateValues.push(date_of_birth || null);
+    }
+    if (bio !== undefined) {
+      updateFields.push('bio = ?');
+      updateValues.push(bio);
+    }
+    if (profile_image !== undefined) {
+      updateFields.push('profile_image = ?');
+      updateValues.push(profile_image);
+    }
+
+    if (updateFields.length > 0) {
+      updateValues.push(req.user.id);
+      await pool.execute(
+        `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
+        updateValues
+      );
+    }
 
     const [updatedUser] = await pool.execute(
       `SELECT id, email, user_type, first_name, last_name, phone, location, 

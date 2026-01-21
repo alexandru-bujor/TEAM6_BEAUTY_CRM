@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -12,45 +11,34 @@ interface Step {
 const steps: Step[] = [
   {
     id: 1,
-    title: "Basic Information",
-    description: "Tell us about your salon"
+    title: "Service",
+    description: "Choose your service"
   },
   {
     id: 2,
-    title: "Location & Services",
-    description: "Where are you and what do you offer?"
+    title: "Specialist",
+    description: "Select a specialist"
   },
   {
     id: 3,
-    title: "Verification",
-    description: "Verify your contact information"
+    title: "Date & Time",
+    description: "Pick a time slot"
   },
   {
     id: 4,
-    title: "Review & Submit",
-    description: "Final step before approval"
+    title: "Review",
+    description: "Confirm booking"
   }
 ];
 
-interface RegistrationStepsProps {
+interface BookingStepperProps {
   currentStep: number;
   onStepChange?: (step: number) => void;
 }
 
-export const RegistrationSteps = ({ currentStep, onStepChange }: RegistrationStepsProps) => {
-  const progress = ((currentStep - 1) / (steps.length - 1)) * 100;
-
+export const BookingStepper = ({ currentStep, onStepChange }: BookingStepperProps) => {
   return (
     <div className="w-full mb-8">
-      {/* Progress Bar */}
-      <div className="mb-8">
-        <Progress value={progress} className="h-2 mb-4" />
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Step {currentStep} of {steps.length}</span>
-          <span>{Math.round(progress)}% Complete</span>
-        </div>
-      </div>
-
       {/* Step Indicators */}
       <div className="relative flex justify-between items-start">
         {/* Connector Lines - Rendered first (behind content) with lower z-index */}
@@ -105,7 +93,7 @@ export const RegistrationSteps = ({ currentStep, onStepChange }: RegistrationSte
                   isClickable && "cursor-pointer hover:scale-105",
                   !isClickable && "cursor-default"
                 )}
-                onClick={() => isClickable && onStepChange(step.id)}
+                onClick={() => isClickable && onStepChange?.(step.id)}
                 disabled={!isClickable}
               >
                 {isCompleted ? (

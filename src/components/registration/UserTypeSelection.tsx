@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +21,7 @@ const UserTypeSelection = ({ open, onOpenChange }: UserTypeSelectionProps) => {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl text-center mb-2">
             Welcome to Beauty Book
@@ -33,9 +32,19 @@ const UserTypeSelection = ({ open, onOpenChange }: UserTypeSelectionProps) => {
         </DialogHeader>
         
         <Tabs defaultValue="login" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="login">Sign In</TabsTrigger>
-            <TabsTrigger value="register">Sign Up</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 bg-muted/30 p-1.5 rounded-lg border border-border/50">
+            <TabsTrigger 
+              value="login"
+              className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-primary/20 rounded-md transition-all duration-200 font-medium py-2.5"
+            >
+              Sign In
+            </TabsTrigger>
+            <TabsTrigger 
+              value="register"
+              className="data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-primary/20 rounded-md transition-all duration-200 font-medium py-2.5"
+            >
+              Sign Up
+            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="login" className="mt-6">

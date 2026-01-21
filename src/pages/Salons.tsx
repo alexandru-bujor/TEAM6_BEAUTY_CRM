@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Search, MapPin, Star, Filter, Grid, List, ChevronDown, ArrowLeft, Loader2 } from "lucide-react";
+import { Search, MapPin, Star, Filter, Grid, List, ChevronDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -180,16 +180,6 @@ const Salons = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      
-      {/* Back Navigation */}
-      <div className="container mx-auto px-4 py-4">
-        <Button variant="ghost" asChild>
-          <Link to="/" className="flex items-center text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Home
-          </Link>
-        </Button>
-      </div>
 
       {/* Header */}
       <header className="bg-card border-b shadow-soft">

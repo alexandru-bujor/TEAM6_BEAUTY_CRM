@@ -1,8 +1,9 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Search, Menu, X, User, LogOut, Settings } from "lucide-react";
+import { Sparkles, Menu, X, User, LogOut, Settings } from "lucide-react";
 import { useState } from "react";
+import UserTypeSelection from "@/components/registration/UserTypeSelection";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +20,7 @@ const Navigation = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showUserTypeModal, setShowUserTypeModal] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -66,24 +68,6 @@ const Navigation = () => {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
-            <Link 
-              to="/salons" 
-              className={`text-sm font-medium transition-colors hover:text-primary ${
-                isActive('/salons') ? 'text-primary' : 'text-foreground/80'
-              }`}
-            >
-              Browse Salons
-            </Link>
-            {!user && (
-              <Link 
-                to="/register" 
-                className={`text-sm font-medium transition-colors hover:text-primary ${
-                  isActive('/register') ? 'text-primary' : 'text-foreground/80'
-                }`}
-              >
-                Register Salon
-              </Link>
-            )}
             {user && (
               <Link 
                 to={getDashboardLink()}
@@ -96,16 +80,8 @@ const Navigation = () => {
             )}
           </nav>
 
-          {/* Search & Auth */}
+          {/* Auth */}
           <div className="hidden md:flex items-center space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <input 
-                type="text" 
-                placeholder="Search salons..." 
-                className="w-64 pl-10 pr-4 py-2 text-sm border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
             {userLoading ? (
               <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             ) : user ? (
@@ -157,11 +133,10 @@ const Navigation = () => {
               </DropdownMenu>
             ) : (
               <Button 
-                size="sm"
-                className="bg-gradient-primary hover:opacity-90"
-                asChild
+                className="bg-gradient-primary hover:opacity-90 shadow-md hover:shadow-lg transition-all h-11 px-6"
+                onClick={() => setShowUserTypeModal(true)}
               >
-                <Link to="/register">Get Started</Link>
+                Sign In
               </Button>
             )}
           </div>
@@ -181,26 +156,6 @@ const Navigation = () => {
         {isMobileMenuOpen && (
           <div className="md:hidden border-t py-4">
             <nav className="flex flex-col space-y-4">
-              <Link 
-                to="/salons" 
-                className={`text-sm font-medium transition-colors hover:text-primary ${
-                  isActive('/salons') ? 'text-primary' : 'text-foreground/80'
-                }`}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Browse Salons
-              </Link>
-              {!user && (
-                <Link 
-                  to="/register" 
-                  className={`text-sm font-medium transition-colors hover:text-primary ${
-                    isActive('/register') ? 'text-primary' : 'text-foreground/80'
-                  }`}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Register Salon
-                </Link>
-              )}
               {user && (
                 <Link 
                   to={getDashboardLink()}
@@ -230,10 +185,12 @@ const Navigation = () => {
                   <Button 
                     size="sm"
                     className="w-full bg-gradient-primary hover:opacity-90"
-                    asChild
-                    onClick={() => setIsMobileMenuOpen(false)}
+                    onClick={() => {
+                      setShowUserTypeModal(true);
+                      setIsMobileMenuOpen(false);
+                    }}
                   >
-                    <Link to="/register">Get Started</Link>
+                    Sign In
                   </Button>
                 )}
               </div>
@@ -241,6 +198,11 @@ const Navigation = () => {
           </div>
         )}
       </div>
+      
+      <UserTypeSelection 
+        open={showUserTypeModal} 
+        onOpenChange={setShowUserTypeModal} 
+      />
     </header>
   );
 };

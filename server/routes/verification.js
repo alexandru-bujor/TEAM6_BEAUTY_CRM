@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import pool from '../database/connection.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { body, validationResult } from 'express-validator';
+import { verificationLimiter } from '../middleware/rateLimiter.js';
+import { logger } from '../middleware/secureLogger.js';
 
 const router = express.Router();
 
@@ -17,7 +19,7 @@ const generateCode = () => {
 };
 
 // Send email verification code
-router.post('/send-email', [
+router.post('/send-email', verificationLimiter, [
   body('email').isEmail().normalizeEmail(),
 ], async (req, res) => {
   try {
@@ -91,7 +93,7 @@ router.post('/send-email', [
 });
 
 // Send phone verification code
-router.post('/send-phone', [
+router.post('/send-phone', verificationLimiter, [
   body('phone').notEmpty().trim(),
 ], async (req, res) => {
   try {

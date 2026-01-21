@@ -201,3 +201,50 @@ CREATE TABLE IF NOT EXISTS verification_codes (
     INDEX idx_phone (phone)
 );
 
+-- Password Reset Tokens
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    token_hash VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user (user_id),
+    INDEX idx_token (token_hash),
+    INDEX idx_expires (expires_at)
+);
+
+-- User MFA (Multi-Factor Authentication)
+CREATE TABLE IF NOT EXISTS user_mfa (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL UNIQUE,
+    secret_encrypted TEXT NOT NULL,
+    secret_iv VARCHAR(32) NOT NULL,
+    secret_auth_tag VARCHAR(32) NOT NULL,
+    enabled BOOLEAN DEFAULT FALSE,
+    last_used_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user (user_id),
+    INDEX idx_enabled (enabled)
+);
+
+-- Security Events Log (for monitoring suspicious activities)
+CREATE TABLE IF NOT EXISTS security_events (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    event_type VARCHAR(50) NOT NULL,
+    user_id INT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    details JSON,
+    severity ENUM('low', 'medium', 'high', 'critical') DEFAULT 'medium',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_event_type (event_type),
+    INDEX idx_user (user_id),
+    INDEX idx_ip (ip_address),
+    INDEX idx_created (created_at),
+    INDEX idx_severity (severity)
+);

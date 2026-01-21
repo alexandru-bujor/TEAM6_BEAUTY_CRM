@@ -58,75 +58,85 @@ export const LoginForm = ({ onSuccess, onCancel }: LoginFormProps) => {
   };
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle className="text-2xl text-center">Sign In</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="email"
-                type="email"
-                placeholder="your@email.com"
-                className="pl-10"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
-                disabled={isLoading}
-              />
+    <div className="flex justify-center w-full">
+      <Card className="w-full max-w-md border-2 shadow-medium">
+        <CardHeader className="text-center pb-4">
+          <CardTitle className="text-2xl font-bold">Sign In</CardTitle>
+          <p className="text-sm text-muted-foreground mt-2">
+            Welcome back! Please sign in to your account
+          </p>
+        </CardHeader>
+        <CardContent className="px-6 pb-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium">
+                Email Address
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="your@email.com"
+                  className="pl-10 h-11"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                className="pl-10"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                required
-                disabled={isLoading}
-              />
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium">
+                Password
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  className="pl-10 h-11"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="flex gap-2">
-            <Button
-              type="submit"
-              className="flex-1 bg-gradient-primary hover:opacity-90"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Signing In...
-                </>
-              ) : (
-                "Sign In"
-              )}
-            </Button>
-            {onCancel && (
+            <div className="pt-2">
               <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
+                type="submit"
+                className="w-full bg-gradient-primary hover:opacity-90 h-11 text-base font-medium"
                 disabled={isLoading}
               >
-                Cancel
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Signing In...
+                  </>
+                ) : (
+                  "Sign In"
+                )}
               </Button>
-            )}
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+              {onCancel && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onCancel}
+                  disabled={isLoading}
+                  className="w-full mt-3 h-11"
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 

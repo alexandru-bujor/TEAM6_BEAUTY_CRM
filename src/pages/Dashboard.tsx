@@ -75,6 +75,7 @@ const Dashboard = () => {
 
   // Format appointment for display
   const formatAppointment = (apt: any) => {
+    const price = apt.price ? Number(apt.price) : 0;
     return {
       id: apt.id,
       salon: apt.salon_name || 'Unknown Salon',
@@ -83,7 +84,7 @@ const Dashboard = () => {
       time: apt.appointment_time,
       duration: `${apt.duration} min`,
       stylist: apt.employee_name || apt.employee || 'Not assigned',
-      price: `$${apt.price?.toFixed(2) || '0.00'}`,
+      price: `$${price.toFixed(2)}`,
       status: apt.status,
       address: apt.salon_address ? `${apt.salon_address}, ${apt.salon_city}, ${apt.salon_state}` : 'Address not available',
       rating: apt.rating || apt.review_rating || undefined,
